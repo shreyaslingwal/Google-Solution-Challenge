@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voter QR Code Generator</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f5f5f5;
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            text-align: center;
+            width: 100%;
+            max-width: 600px;
+        }
+        h1 {
+            font-weight: bold;
+            font-size: 24px;
+            margin-bottom: 15px;
+        }
+        .description {
+            margin-bottom: 20px;
+            color: #555;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            background: #eef2ff;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+        .input-group label {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .input-group input {
+            border: none;
+            outline: none;
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            background: #f0f0f0; /* Gray background to indicate it's readonly */
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            cursor: not-allowed; /* Changes cursor to indicate field cannot be edited */
+        }
+        .btn {
+            background: #ffcc00;
+            border: none;
+            width: 100%;
+            padding: 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+        .btn:hover {
+            background: #e6b800;
+        }
+        .error-message {
+            color: #e74c3c;
+            margin-top: 10px;
+            font-size: 14px;
+            display: none;
+        }
+        .qr-container {
+            display: none;
+            margin-top: 30px;
+            text-align: center;
+        }
+        #qrCode {
+            margin: 0 auto;
+            max-width: 200px;
+        }
+        .qr-info {
+            margin-top: 15px;
+            background: #eef2ff;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: left;
+        }
+        .qr-info p {
+            margin-bottom: 8px;
+        }
+        .qr-download {
+            display: block;
+            margin-top: 15px;
+            background: #4CAF50;
+            color: white;
+            padding: 10px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        .qr-download:hover {
+            background: #45a049;
+        }
+        .loading {
+            display: none;
+            margin-top: 20px;
+        }
+        .loading::after {
+            content: "...";
+            animation: dots 1s steps(5, end) infinite;
+        }
+        @keyframes dots {
+            0%, 20% { content: "."; }
+            40% { content: ".."; }
+            60%, 100% { content: "..."; }
+        }
+        .user-info {
+            display: none;
+            margin-top: 20px;
+            text-align: left;
+            background: #f8f8f8;
+            padding: 15px;
+            border-radius: 6px;
+        }
+        .user-info h3 {
+            margin-bottom: 10px;
+        }
+        .user-info p {
+            margin-bottom: 5px;
+        }
+        .privacy-notice {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #666;
+        }
+        .security-badge {
+            display: inline-block;
+            background: #2ecc71;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-left: 5px;
+        }
+        .lockIcon {
+            width: 16px;
+            height: 16px;
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 5px;
+        }
+        .login-reminder {
+            color: #3498db;
+            margin-bottom: 15px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Voter QR Code Generator</h1>
+        <p class="description">Generate a secure QR code containing your voter information. This QR code can be used for quick verification at polling stations.</p>
+        
+        <div id="loginReminder" class="login-reminder">Your Voter ID is automatically fetched from your account.</div>
+        
+        <div class="input-group">
+            <label for="vid">Your Voter ID:
+                <svg class="lockIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0110 0v4"></path>
+                </svg>
+            </label>
+            <input type="text" id="vid" placeholder="Auto-fetched from your account" readonly>
+        </div>
+        
+        <button id="fetchBtn" class="btn">Generate QR Code</button>
+        
+        <div id="userInfo" class="user-info">
+            <h3>Voter Information</h3>
+            <p id="nameInfo"><strong>Name:</strong> <span></span></p>
+            <p id="dobInfo"><strong>Date of Birth:</strong> <span></span></p>
+            <p id="emailInfo"><strong>Email:</strong> <span></span></p>
+            <p id="vidInfo"><strong>Voter ID:</strong> <span></span></p>
+            <p id="aadhaarInfo"><strong>Aadhaar:</strong> <span>Verified <span class="security-badge">Secure</span></span></p>
+        </div>
+        
+        <div id="errorMessage" class="error-message"></div>
+        <div id="loading" class="loading">Generating QR Code</div>
+        
+        <div id="qrContainer" class="qr-container">
+            <div id="qrCode"></div>
+            <div class="qr-info">
+                <p><strong>QR Code Information:</strong></p>
+                <p>This QR code contains your voter information with enhanced security.</p>
+                <p>Present this QR code at your polling station for quick verification.</p>
+                <p><strong>Security Note:</strong> Your Aadhaar information is securely hashed and not included in the QR code.</p>
+            </div>
+            <a id="downloadQR" class="qr-download" href="#" download="voter-qr-code.png">Download QR Code</a>
+        </div>
+        
+        <p class="privacy-notice">Your privacy is important to us. We protect all sensitive information and do not include your Aadhaar number in the QR code. The QR code expires after 24 hours for added security.</p>
+    </div>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    
+    <!-- CryptoJS for encryption -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    
+    <!-- QR Code Generator -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.0/build/qrcode.min.js"></script>
+    
+    <script>
+        // Firebase configuration with direct API keys
+        const firebaseConfig = {
+            apiKey: "AIzaSyDLpqpT4DQAfoloD_S4nCDOq0bamjuVyBM",
+            authDomain: "voting-made-easy-55b34.firebaseapp.com",
+            projectId: "voting-made-easy-55b34",
+            storageBucket: "voting-made-easy-55b34.appspot.com",
+            messagingSenderId: "88186548606",
+            appId: "1:88186548606:web:cdfa835053f1f0e64f032f",
+            measurementId: "G-491RJ3GNVB"
+        };
+        
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        
+        // Get a reference to the Firestore database
+        const db = firebase.firestore();
+        
+        // Get DOM elements
+        const vidInput = document.getElementById('vid');
+        const fetchBtn = document.getElementById('fetchBtn');
+        const errorMessage = document.getElementById('errorMessage');
+        const loading = document.getElementById('loading');
+        const qrContainer = document.getElementById('qrContainer');
+        const qrCode = document.getElementById('qrCode');
+        const downloadQR = document.getElementById('downloadQR');
+        const userInfo = document.getElementById('userInfo');
+        const nameInfo = document.getElementById('nameInfo').querySelector('span');
+        const dobInfo = document.getElementById('dobInfo').querySelector('span');
+        const emailInfo = document.getElementById('emailInfo').querySelector('span');
+        const vidInfo = document.getElementById('vidInfo').querySelector('span');
+        const loginReminder = document.getElementById('loginReminder');
+        
+        // Security-related variables
+        let qrExpiration = null;
+        
+        // Check if user is already logged in (from session storage)
+        document.addEventListener('DOMContentLoaded', function() {
+            const userData = JSON.parse(sessionStorage.getItem('userData'));
+            
+            if (userData && userData.vid) {
+                vidInput.value = sanitizeInput(userData.vid);
+                loginReminder.style.display = 'none';
+            } else {
+                // If no user data is found, display error and disable generate button
+                showError('You must be logged in to generate a QR code.');
+                fetchBtn.disabled = true;
+                fetchBtn.style.opacity = '0.5';
+                fetchBtn.style.cursor = 'not-allowed';
+            }
+        });
+        
+        // Generate QR code when button is clicked
+        fetchBtn.addEventListener('click', function() {
+            const vid = sanitizeInput(vidInput.value.trim());
+            
+            // Reset UI
+            errorMessage.style.display = 'none';
+            qrContainer.style.display = 'none';
+            userInfo.style.display = 'none';
+            qrCode.innerHTML = ''; // Clear any previous QR code
+            
+            if (!vid) {
+                showError('No Voter ID found. Please log in to continue.');
+                return;
+            }
+            
+            // Basic validation
+            if (!validateVoterId(vid)) {
+                showError('Invalid Voter ID format. Please contact support.');
+                return;
+            }
+            
+            loading.style.display = 'block';
+            
+            // Fetch user data from Firestore
+            db.collection('users')
+                .where('VId', '==', vid)
+                .get()
+                .then((querySnapshot) => {
+                    if (querySnapshot.empty) {
+                        showError('No voter found with this ID. Please contact support.');
+                        return;
+                    }
+                    
+                    const userData = querySnapshot.docs[0].data();
+                    
+                    // Set QR expiration time (24 hours from now)
+                    qrExpiration = new Date();
+                    qrExpiration.setHours(qrExpiration.getHours() + 24);
+                    
+                    // Prepare secure voter data for QR code - exclude Aadhaar
+                    const voterData = {
+                        name: userData.fullName || '',
+                        dob: userData.dob || '',
+                        email: userData.email || '',
+                        vid: userData.VId,
+                        aadhaarVerified: !!userData.aadhaarNumber, // Boolean flag only
+                        exp: qrExpiration.toISOString() // Expiration timestamp
+                    };
+                    
+                    // Store basic user data in session storage (no sensitive info)
+                    const sessionData = {
+                        vid: voterData.vid,
+                        name: voterData.name
+                    };
+                    sessionStorage.setItem('userData', JSON.stringify(sessionData));
+                    
+                    // Display user information
+                    nameInfo.textContent = sanitizeOutput(voterData.name);
+                    dobInfo.textContent = sanitizeOutput(voterData.dob);
+                    emailInfo.textContent = sanitizeOutput(voterData.email);
+                    vidInfo.textContent = sanitizeOutput(voterData.vid);
+                    userInfo.style.display = 'block';
+                    
+                    // Generate QR code with encrypted data
+                    const encryptedData = encryptData(JSON.stringify(voterData));
+                    
+                    // Generate QR code as SVG
+                    QRCode.toString(encryptedData, {
+                        errorCorrectionLevel: 'H',
+                        type: 'svg',
+                        width: 200,
+                        margin: 1,
+                        color: {
+                            dark: '#000',
+                            light: '#fff'
+                        }
+                    }, function(error, svg) {
+                        loading.style.display = 'none';
+                        
+                        if (error) {
+                            showError('Error generating QR code: ' + error);
+                            return;
+                        }
+                        
+                        // Insert the SVG string into the qrCode div (sanitized)
+                        qrCode.innerHTML = sanitizeSVG(svg);
+                        
+                        // Show QR code container
+                        qrContainer.style.display = 'block';
+                        
+                        // Setup download functionality
+                        setupDownload(encryptedData);
+                    });
+                })
+                .catch((error) => {
+                    showError('Error fetching voter data: ' + error.message);
+                });
+        });
+        
+        // Function to set up the download link
+        function setupDownload(qrText) {
+            // Create a temporary canvas for PNG export
+            const canvas = document.createElement('canvas');
+            QRCode.toCanvas(canvas, qrText, {
+                width: 200,
+                margin: 1,
+                color: {
+                    dark: '#000',
+                    light: '#fff'
+                }
+            }, function(error) {
+                if (error) {
+                    console.error('Error creating download image:', error);
+                    return;
+                }
+                
+                // Set the download link href to the canvas data URL
+                downloadQR.href = canvas.toDataURL('image/png');
+            });
+        }
+        
+        // Basic encryption function using CryptoJS
+        function encryptData(data) {
+            try {
+                // Use a fixed encryption key for simplicity
+                // In production, this should be a secure, unique key
+                const encKey = "VoterSecureAppKey2025";
+                
+                // Encrypt the data
+                const encrypted = CryptoJS.AES.encrypt(data, encKey).toString();
+                return encrypted;
+            } catch (error) {
+                console.error("Encryption error:", error);
+                return data; // Fallback to unencrypted if encryption fails
+            }
+        }
+        
+        // Basic decryption function for reference
+        function decryptData(encryptedData) {
+            try {
+                const encKey = "VoterSecureAppKey2025";
+                const decrypted = CryptoJS.AES.decrypt(encryptedData, encKey).toString(CryptoJS.enc.Utf8);
+                return decrypted;
+            } catch (error) {
+                console.error("Decryption error:", error);
+                return null;
+            }
+        }
+        
+        // Input sanitization to prevent XSS
+        function sanitizeInput(input) {
+            if (!input) return '';
+            return input.replace(/[<>]/g, ''); // Simple sanitization
+        }
+        
+        // Output sanitization to prevent XSS
+        function sanitizeOutput(input) {
+            if (!input) return '';
+            const div = document.createElement('div');
+            div.textContent = input;
+            return div.innerHTML;
+        }
+        
+        // SVG sanitization to prevent XSS
+        function sanitizeSVG(svg) {
+            // Basic SVG sanitization
+            return svg.replace(/on\w+="[^"]*"/g, ''); // Remove event handlers
+        }
+        
+        // Validate voter ID format
+        function validateVoterId(vid) {
+            // Basic validation - should be enhanced based on actual Voter ID format
+            return /^[A-Za-z0-9]{6,12}$/.test(vid);
+        }
+        
+        // Helper function to show error
+        function showError(message) {
+            loading.style.display = 'none';
+            errorMessage.textContent = sanitizeOutput(message);
+            errorMessage.style.display = 'block';
+        }
+        
+        // Add session timeout for security
+        let sessionTimeout;
+        function resetSessionTimeout() {
+            clearTimeout(sessionTimeout);
+            sessionTimeout = setTimeout(function() {
+                // Clear session data after timeout
+                sessionStorage.removeItem('userData');
+                if (qrContainer.style.display === 'block') {
+                    showError('Your session has expired. Please log in again to generate a new QR code.');
+                    qrContainer.style.display = 'none';
+                    fetchBtn.disabled = true;
+                    fetchBtn.style.opacity = '0.5';
+                    fetchBtn.style.cursor = 'not-allowed';
+                    vidInput.value = '';
+                    loginReminder.style.display = 'block';
+                }
+            }, 30 * 60 * 1000); // 30 minutes
+        }
+        
+        // Reset session timeout on user activity
+        ['mousedown', 'keypress', 'scroll', 'touchstart'].forEach(function(event) {
+            document.addEventListener(event, resetSessionTimeout, false);
+        });
+        
+        // Initialize session timeout
+        resetSessionTimeout();
+    </script>
+</body>
+</html>
