@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Voter ID Information Extractor</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        text-align: center;
+        background-color: #f4f4f4;
+      }
+      #camera-container {
+        width: 100%;
+        max-width: 500px;
+        margin: 20px auto;
+        position: relative;
+        background-color: #000;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+      #video {
+        width: 100%;
+        max-height: 400px;
+        object-fit: cover;
+        transform: scaleX(-1);
+      }
+      #canvas {
+        display: none;
+      }
+      .camera-controls {
+        margin-top: 20px;
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+      }
+      #resultContainer {
+        margin-top: 20px;
+        border: 1px solid #ddd;
+        padding: 15px;
+        background-color: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        text-align: left;
+      }
+      .btn {
+        padding: 12px 25px;
+        background-color: #4caf50;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+        font-size: 16px;
+      }
+      .btn:hover {
+        background-color: #45a049;
+      }
+      .btn:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+      }
+      .error {
+        color: #d9534f;
+        background-color: #f2dede;
+        border: 1px solid #ebccd1;
+        padding: 10px;
+        border-radius: 5px;
+      }
+      .success {
+        color: #3c763d;
+        background-color: #dff0d8;
+        border: 1px solid #d6e9c6;
+        padding: 10px;
+        border-radius: 5px;
+      }
+      .warning {
+        color: #8a6d3b;
+        background-color: #fcf8e3;
+        border: 1px solid #faebcc;
+        padding: 10px;
+        border-radius: 5px;
+      }
+      .scan-indicator {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background-color: #1e88e5;
+        display: none;
+        margin: 10px auto;
+        animation: pulse 1.5s infinite;
+      }
+      @keyframes pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(30, 136, 229, 0.7);
+        }
+        70% {
+          box-shadow: 0 0 0 15px rgba(30, 136, 229, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(30, 136, 229, 0);
+        }
+      }
+      #retry-message {
+        color: #1e88e5;
+        font-weight: bold;
+        margin: 10px 0;
+        display: none;
+      }
+      #captured-image {
+        max-width: 100%;
+        margin-top: 10px;
+        border-radius: 5px;
+      }
+      .extracted-data {
+        background-color: #f8f9fa;
+        border-left: 4px solid #4caf50;
+        padding: 10px 15px;
+        margin: 10px 0;
+      }
+      .verification-details {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+      .verification-row {
+        display: flex;
+        justify-content: space-between;
+      }
+      .match-indicator {
+        font-weight: bold;
+      }
+      .match-success {
+        color: #4caf50;
+      }
+      .match-error {
+        color: #d9534f;
+      }
+      .redirect-btn {
+        margin-top: 15px;
+        padding: 12px 25px;
+        background-color: #1e88e5;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+        font-size: 16px;
+        width: 100%;
+      }
+      .redirect-btn:hover {
+        background-color: #1976d2;
+      }
+      #countdown {
+        font-weight: bold;
+        color: #1e88e5;
+        margin-top: 10px;
+      }
+    </style>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+  </head>
+  <body>
+    <h1>Voter ID Information Extractor</h1>
+
+    <div id="browser-support-warning" style="display: none" class="error"></div>
+
+    <div id="camera-container">
+      <video id="video" playsinline autoplay></video>
+      <canvas id="canvas"></canvas>
+    </div>
+
+    <div class="camera-controls">
+      <button id="capture-btn" class="btn" disabled>
+        Initializing Camera...
+      </button>
+    </div>
+
+    <div id="scan-indicator" class="scan-indicator"></div>
+    <div id="retry-message">Card could not be scanned properly. Please try again.</div>
+
+    <div id="resultContainer"></div>
+    <img id="captured-image" style="display: none" />
+
+    <script>
+      // Configuration
+      const CONFIG = {
+        // Replace this with your actual Google Vision API key
+        GOOGLE_VISION_API_KEY: "AIzaSyCnBwZw1tadrk1oxcoc99dO1C-7wArEn3c",
+        FIREBASE_CONFIG: {
+          apiKey: "AIzaSyDLpqpT4DQAfoloD_S4nCDOq0bamjuVyBM",
+          authDomain: "voting-made-easy-55b34.firebaseapp.com",
+          projectId: "voting-made-easy-55b34",
+          storageBucket: "voting-made-easy-55b34.firebasestorage.app",
+          messagingSenderId: "88186548606",
+          appId: "1:88186548606:web:cdfa835053f1f0e64f032f",
+          measurementId: "G-491RJ3GNVB",
+        },
+        // The page to redirect to after successful verification
+        REDIRECT_PAGE: "voting-page.html",
+        // Redirect delay in seconds
+        REDIRECT_DELAY: 5
+      };
+
+      // Firebase Initialization
+      firebase.initializeApp(CONFIG.FIREBASE_CONFIG);
+      const firestore = firebase.firestore();
+
+      // DOM Elements
+      const video = document.getElementById("video");
+      const canvas = document.getElementById("canvas");
+      const captureBtn = document.getElementById("capture-btn");
+      const resultContainer = document.getElementById("resultContainer");
+      const browserSupportWarning = document.getElementById("browser-support-warning");
+      const capturedImage = document.getElementById("captured-image");
+      const scanIndicator = document.getElementById("scan-indicator");
+      const retryMessage = document.getElementById("retry-message");
+
+      // Utility function for logging (without visible debug)
+      function logToConsole(message, data = null) {
+        console.log(`[${new Date().toLocaleTimeString()}] ${message}`, data || '');
+      }
+
+      // Show scan error indicator
+      function showScanError() {
+        scanIndicator.style.display = "block";
+        retryMessage.style.display = "block";
+        
+        // Auto-hide after 5 seconds
+        setTimeout(() => {
+          scanIndicator.style.display = "none";
+          retryMessage.style.display = "none";
+        }, 5000);
+      }
+
+      // Hide scan error indicator
+      function hideScanError() {
+        scanIndicator.style.display = "none";
+        retryMessage.style.display = "none";
+      }
+
+      // Browser Support Check
+      function checkBrowserSupport() {
+        const requiredAPIs = [
+          "mediaDevices" in navigator,
+          "getUserMedia" in navigator.mediaDevices,
+          "fetch" in window,
+          "TextDecoder" in window,
+        ];
+
+        const isSupported = requiredAPIs.every((api) => api);
+
+        if (!isSupported) {
+          browserSupportWarning.style.display = "block";
+          browserSupportWarning.textContent =
+            "Your browser is not compatible. Please use a modern browser like Chrome, Firefox, or Safari.";
+          captureBtn.disabled = true;
+          return false;
+        }
+        return true;
+      }
+
+      // Camera Initialization
+      async function startCamera() {
+        if (!checkBrowserSupport()) return;
+
+        try {
+          const constraints = {
+            video: {
+              width: { ideal: 1280, max: 1920 },
+              height: { ideal: 720, max: 1080 },
+              facingMode: {
+                ideal: ["environment", "user"],
+                fallback: "user",
+              },
+            },
+          };
+
+          const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+          video.srcObject = stream;
+
+          await new Promise((resolve) => {
+            video.onloadedmetadata = resolve;
+          });
+
+          await video.play();
+
+          captureBtn.disabled = false;
+          captureBtn.textContent = "Capture ID";
+
+          resultContainer.innerHTML = `
+                    <div class="success"> 
+                        <p>Point VOTER ID to the camera</p>
+                    </div>
+                `;
+        } catch (err) {
+          handleCameraError(err);
+        }
+      }
+
+      // Camera Error Handling
+      function handleCameraError(err) {
+        console.error("Camera Error:", err);
+        logToConsole("Camera Error", err);
+
+        let errorMessage = "An unknown error occurred.";
+
+        switch (err.name) {
+          case "NotAllowedError":
+            errorMessage =
+              "Camera access was denied. Please grant camera permissions.";
+            break;
+          case "NotFoundError":
+            errorMessage = "No camera found. Please connect a camera.";
+            break;
+          case "OverconstrainedError":
+            errorMessage = "Camera does not meet the requested constraints.";
+            break;
+          default:
+            errorMessage = `Camera Error: ${err.message}`;
+        }
+
+        resultContainer.innerHTML = `
+                <div class="error">
+                    <p>🚫 Camera Initialization Failed</p>
+                    <p>${errorMessage}</p>
+                    <p>Troubleshooting tips:
+                        <br>- Check camera permissions
+                        <br>- Ensure HTTPS connection
+                        <br>- Try a different browser</p>
+                </div>
+            `;
+
+        captureBtn.disabled = true;
+        captureBtn.textContent = "Camera Error";
+      }
+
+      // Capture Image
+      function captureImage() {
+        // Disable button during processing
+        captureBtn.disabled = true;
+        captureBtn.textContent = "Processing...";
+        
+        // Hide any previous scan error
+        hideScanError();
+
+        // Setup canvas to match video
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const context = canvas.getContext("2d");
+
+        // Draw current video frame
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        // Convert canvas to image
+        const imageDataUrl = canvas.toDataURL("image/jpeg");
+        capturedImage.src = imageDataUrl;
+        capturedImage.style.display = "block";
+
+        // Send to Google Vision API for text extraction
+        extractTextFromImage(imageDataUrl);
+      }
+
+      // Extract Text Using Google Vision API
+      async function extractTextFromImage(imageDataUrl) {
+        try {
+          // Remove data URL prefix
+          const base64Image = imageDataUrl.split(",")[1];
+
+          logToConsole("Sending image to Google Vision API");
+
+          const response = await fetch(
+            `https://vision.googleapis.com/v1/images:annotate?key=${CONFIG.GOOGLE_VISION_API_KEY}`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                requests: [
+                  {
+                    image: { content: base64Image },
+                    features: [{ type: "TEXT_DETECTION" }],
+                  },
+                ],
+              }),
+            }
+          );
+
+          const data = await response.json();
+          
+          logToConsole("Google Vision API Response Received");
+
+          // Extract text from Vision API response
+          const extractedText = data.responses[0].fullTextAnnotation
+            ? data.responses[0].fullTextAnnotation.text
+            : null;
+
+          if (!extractedText) {
+            logToConsole("No text detected in image");
+            showScanError();
+            resultContainer.innerHTML = `
+                <div class="error">
+                    <p>No text detected in the image</p>
+                    <p>Please ensure the ID card is clearly visible and try again</p>
+                </div>
+            `;
+            captureBtn.disabled = false;
+            captureBtn.textContent = "Capture ID";
+            return;
+          }
+
+          logToConsole("Extracted Text", extractedText);
+          
+          // Parse extracted text to find Voter ID and Name
+          const extractedInfo = extractCardInfo(extractedText);
+          
+          if (!extractedInfo.voterId || !extractedInfo.name) {
+            logToConsole("Failed to extract required information", extractedInfo);
+            showScanError();
+            
+            let missingInfo = [];
+            if (!extractedInfo.voterId) missingInfo.push("Voter ID");
+            if (!extractedInfo.name) missingInfo.push("Name");
+            
+            resultContainer.innerHTML = `
+                <div class="error">
+                    <p>Could not extract required information: ${missingInfo.join(", ")}</p>
+                    <p>Please ensure the ID card is clearly visible and try again</p>
+                    <div class="extracted-data">
+                        <p>Text detected:</p>
+                        <pre style="white-space: pre-wrap; font-size: 12px;">${extractedText}</pre>
+                    </div>
+                </div>
+            `;
+            captureBtn.disabled = false;
+            captureBtn.textContent = "Capture ID";
+            return;
+          }
+
+          // Verify Voter ID in Firestore
+          await verifyVoterInDatabase(extractedInfo);
+        } catch (error) {
+          console.error("Text Extraction Error:", error);
+          logToConsole("Text Extraction Error", error);
+          showScanError();
+          resultContainer.innerHTML = `
+                <div class="error">
+                    <p>Error extracting text from image</p>
+                    <p>${error.message}</p>
+                </div>
+            `;
+          captureBtn.disabled = false;
+          captureBtn.textContent = "Capture ID";
+        }
+      }
+
+      // Extract Voter ID and Name from Text
+      function extractCardInfo(text) {
+        const result = {
+          voterId: null,
+          name: null
+        };
+        
+        // Regex to find specific voter ID format like ABC1536382
+        const voterIdRegex = /\b([A-Z]{3}\d{7})\b/;
+        const voterIdMatch = text.match(voterIdRegex);
+        
+        if (voterIdMatch) {
+          result.voterId = voterIdMatch[1];
+        }
+        
+        // Extract name from common formats on ID cards
+        // Look for patterns like "Name: John Doe" or "NAME: JOHN DOE" or just after "VOTER" or "ELECTOR"
+        const namePatterns = [
+          /Name\s*[:]\s*([A-Za-z\s.]+)(?=\n|$)/i,
+          /NAME\s*[:]\s*([A-Za-z\s.]+)(?=\n|$)/i,
+          /VOTER\s*[:]\s*([A-Za-z\s.]+)(?=\n|$)/i,
+          /ELECTOR\s*[:]\s*([A-Za-z\s.]+)(?=\n|$)/i,
+          /(?:VOTER|ELECTOR|CARD)\s+([A-Z][a-z]+\s+[A-Z][a-z]+)(?=\n|$)/
+        ];
+        
+        for (const pattern of namePatterns) {
+          const nameMatch = text.match(pattern);
+          if (nameMatch && nameMatch[1]) {
+            // Clean up extracted name
+            result.name = nameMatch[1].trim().replace(/\s+/g, ' ');
+            break;
+          }
+        }
+        
+        logToConsole("Card Info Extraction Result", result);
+        
+        return result;
+      }
+
+      // Function to handle redirection after successful verification
+      function redirectToVotingPage(voterData) {
+        // Store voter information in sessionStorage for use on the next page
+        sessionStorage.setItem('verifiedVoter', JSON.stringify({
+          voterId: voterData.VId || voterData.voterId,
+          name: voterData.fullName,
+          timestamp: new Date().toISOString()
+        }));
+        
+        // Create a countdown timer for redirection
+        let secondsLeft = CONFIG.REDIRECT_DELAY;
+        const countdownElement = document.createElement('div');
+        countdownElement.id = 'countdown';
+        countdownElement.textContent = `Redirecting in ${secondsLeft} seconds...`;
+        
+        // Create a button for immediate redirection
+        const redirectButton = document.createElement('button');
+        redirectButton.className = 'redirect-btn';
+        redirectButton.textContent = 'Continue to Voting Page';
+        redirectButton.onclick = () => window.location.href = CONFIG.REDIRECT_PAGE;
+        
+        // Add both elements to the result container
+        document.querySelector('.success').appendChild(redirectButton);
+        document.querySelector('.success').appendChild(countdownElement);
+        
+        // Start countdown
+        const countdownInterval = setInterval(() => {
+          secondsLeft--;
+          countdownElement.textContent = `Redirecting in ${secondsLeft} seconds...`;
+          
+          if (secondsLeft <= 0) {
+            clearInterval(countdownInterval);
+            window.location.href = CONFIG.REDIRECT_PAGE;
+          }
+        }, 1000);
+      }
+
+      async function verifyVoterInDatabase(extractedInfo) {
+        const { voterId, name } = extractedInfo;
+        
+        try {
+          // Query Firestore for voter
+          const querySnapshot = await firestore
+            .collection("Already_registered")
+            .where("VId", "==", voterId)
+            .get();
+
+          logToConsole("Firestore Lookup Result", {
+            VId: voterId,
+            found: !querySnapshot.empty
+          });
+
+          if (!querySnapshot.empty) {
+            // Get the first matching document
+            const voterDoc = querySnapshot.docs[0];
+            const voterData = voterDoc.data();
+            
+            // Normalize names for comparison (remove extra spaces, case insensitive)
+            const normalizedExtractedName = name.toLowerCase().trim().replace(/\s+/g, ' ');
+            const normalizedDatabaseName = voterData.fullName.toLowerCase().trim().replace(/\s+/g, ' ');
+            
+            // Check if names match
+            const namesMatch = normalizedExtractedName === normalizedDatabaseName;
+            
+            // If names don't match exactly, check if one is contained within the other
+            // (helps with partial name extraction scenarios)
+            const namePartialMatch = !namesMatch && 
+              (normalizedExtractedName.includes(normalizedDatabaseName) || 
+               normalizedDatabaseName.includes(normalizedExtractedName));
+            
+            logToConsole("Name Comparison", {
+              extractedName: normalizedExtractedName,
+              databaseName: normalizedDatabaseName,
+              exactMatch: namesMatch,
+              partialMatch: namePartialMatch
+            });
+
+            if (namesMatch) {
+              // Both Voter ID and name match perfectly
+              resultContainer.innerHTML = `
+                <div class="success">
+                    <h3>Voter Verified Successfully</h3>
+                    <div class="verification-details">
+                      <div class="verification-row">
+                        <span>Name:</span>
+                        <span class="match-indicator match-success">${voterData.fullName} ✓</span>
+                      </div>
+                      <div class="verification-row">
+                        <span>Voter ID:</span>
+                        <span class="match-indicator match-success">${voterId} ✓</span>
+                      </div>
+                      <div class="verification-row">
+                        <span>Status:</span>
+                        <span>Registered</span>
+                      </div>
+                    </div>
+                </div>
+              `;
+              
+              // Redirect after successful verification
+              redirectToVotingPage(voterData);
+              
+            } else if (namePartialMatch) {
+              // Voter ID matches but name only partially matches
+              resultContainer.innerHTML = `
+                <div class="warning">
+                    <h3>Voter ID Verified - Name Partially Matches</h3>
+                    <div class="verification-details">
+                      <div class="verification-row">
+                        <span>Extracted Name:</span>
+                        <span>${name}</span>
+                      </div>
+                      <div class="verification-row">
+                        <span>Database Name:</span>
+                        <span>${voterData.fullName}</span>
+                      </div>
+                      <div class="verification-row">
+                        <span>Voter ID:</span>
+                        <span class="match-indicator match-success">${voterId} ✓</span>
+                      </div>
+                      <div class="verification-row">
+                        <span>Status:</span>
+                        <span>Registered - Manual Verification Recommended</span>
+                      </div>
+                    </div>
+                </div>
+              `;
+            } else {
+              // Voter ID matches but name doesn't match at all
+              resultContainer.innerHTML = `
+                <div class="error">
+                    <h3>Name Verification Failed</h3>
+                    <div class="verification-details">
+                      <div class="verification-row">
+                        <span>Extracted Name:</span>
+                        <span class="match-indicator match-error">${name} ✗</span>
+                      </div>
+                      <div class="verification-row">
+                        <span>Database Name:</span>
+                        <span>${voterData.fullName}</span>
+                      </div>
+                      <div class="verification-row">
+                        <span>Voter ID:</span>
+                        <span class="match-indicator match-success">${voterId} ✓</span>
+                      </div>
+                      <div class="verification-row">
+                        <span>Status:</span>
+                        <span>ID Found but Name Mismatch - Verification Failed</span>
+                      </div>
+                    </div>
+                </div>
+              `;
+            }
+          } else {
+            // Voter ID not found in database
+            showScanError();
+            resultContainer.innerHTML = `
+                <div class="error">
+                    <h3>Voter Not Found</h3>
+                    <div class="verification-details">
+                      <div class="verification-row">
+                        <span>Extracted Name:</span>
+                        <span>${name}</span>
+                      </div>
+                      <div class="verification-row">
+                        <span>Voter ID:</span>
+                        <span class="match-indicator match-error">${voterId} ✗</span>
+                      </div>
+                      <div class="verification-row">
+                        <span>Status:</span>
+                        <span>Not Registered</span>
+                      </div>
+                    </div>
+                </div>
+            `;
+          }
+        } catch (error) {
+          console.error("Database Verification Error:", error);
+          logToConsole("Database Verification Error", error);
+          showScanError();
+          resultContainer.innerHTML = `
+            <div class="error">
+                <p>Error verifying voter in database</p>
+                <p>${error.message}</p>
+            </div>
+          `;
+        } finally {
+          // Re-enable capture button
+          captureBtn.disabled = false;
+          captureBtn.textContent = "Capture ID";
+        }
+      }
+
+      // Event Listeners
+      captureBtn.addEventListener("click", captureImage);
+
+      // Initialize on page load
+      document.addEventListener("DOMContentLoaded", () => {
+        try {
+          startCamera();
+        } catch (error) {
+          console.error("Initialization Error:", error);
+          logToConsole("Initialization Error", error);
+          resultContainer.innerHTML = "Error loading application";
+        }
+      });
+    </script>
+  </body>
+</html>
