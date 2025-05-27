@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Booth Login</title>
+    <link rel="stylesheet" href="style/Boothlogin.css">
+
+</head>
+<body>
+    <div class="login-container">
+        <h1 class="login-title">Booth Login</h1>
+        <p class="login-instruction">Please enter Booth credentials to login</p>
+        <form id="loginForm">
+            <div class="input-container">
+                <label for="boothCode" class="input-label">Booth Code</label>
+                <input type="text" id="boothCode" placeholder="Enter Booth Code" required>
+                <p class="format-hint" id="formatHint">Format: XX-W### (e.g., UK-W123)</p>
+                <p class="error-message" id="boothCodeError">Please enter a valid Booth Code</p>
+            </div>
+            
+            <div class="input-container">
+                <label for="password" class="input-label">Booth password</label>
+                <input type="password" id="password" placeholder="Enter Booth password" required>
+                <p class="error-message" id="passwordError">Please enter Booth password</p>
+            </div>
+
+            <div class="password-toggle">
+                <input type="checkbox" id="showPassword" onclick="togglePasswordVisibility()">
+                <label for="showPassword">Show Password</label>
+            </div>
+            
+            <div class="login-btn-container">
+                <button type="submit" class="login-btn" id="loginButton">Login</button>
+            </div>
+            <a href="javascript:void(0)" class="back-link" id="backButton">← Back to previous page</a>
+            
+            <div class="loading" id="loadingIndicator">Authenticating...</div>
+            <p class="error-message" id="authError">Authentication failed. Please check your credentials.</p>
+        </form>
+    </div>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    
+    <script>
+        // Function to toggle password visibility
+        function togglePasswordVisibility() {
+            const passwordInput = document.getElementById("password");
+            const showPasswordCheckbox = document.getElementById("showPassword");
+            
+            if (showPasswordCheckbox.checked) {
+                passwordInput.type = "text";
+            } else {
+                passwordInput.type = "password";
+            }
+        }
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyDLpqpT4DQAfoloD_S4nCDOq0bamjuVyBM",
+            authDomain: "voting-made-easy-55b34.firebaseapp.com",
+            projectId: "voting-made-easy-55b34",
+            storageBucket: "voting-made-easy-55b34.firebaseapp.com",
+            messagingSenderId: "88186548606",
+            appId: "1:88186548606:web:cdfa835053f1f0e64f032f",
+            measurementId: "G-491RJ3GNVB"
+        };
+        
+        try {
+            // Initialize Firebase
+            firebase.initializeApp(firebaseConfig);
+            const db = firebase.firestore();
+            console.log("Firebase initialized successfully");
+            
+            // Booth code validation function 
+            function isValidBoothCode(code) {
+                // Regex pattern: two capital letters, hyphen, capital W, followed by 1-3 digits
+                const pattern = /^[A-Z]{2}-W[0-9]{1,3}$/;
+                return pattern.test(code);
+            }
+            
+            const loginForm = document.getElementById('loginForm');
+            const boothCodeInput = document.getElementById('boothCode');
+            const passwordInput = document.getElementById('password');
+            const boothCodeError = document.getElementById('boothCodeError');
+            const passwordError = document.getElementById('passwordError');
+            const authError = document.getElementById('authError');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const loginButton = document.getElementById('loginButton');
+            const formatHint = document.getElementById('formatHint');
+            
+            // Hide error messages initially
+            boothCodeError.style.display = 'none';
+            passwordError.style.display = 'none';
+            authError.style.display = 'none';
+            loadingIndicator.style.display = 'none';
+            
+            // Add input validation for booth code format with color feedback
+            boothCodeInput.addEventListener('input', function() {
+                const boothCode = this.value.trim();
+                
+                if (!boothCode) {
+                    // Empty input - reset formatting
+                    this.classList.remove('input-valid', 'input-invalid');
+                    formatHint.classList.remove('valid', 'invalid');
+                    boothCodeError.style.display = 'none';
+                } else if (isValidBoothCode(boothCode)) {
+                    // Valid format - show green
+                    this.classList.add('input-valid');
+                    this.classList.remove('input-invalid');
+                    formatHint.classList.add('valid');
+                    formatHint.classList.remove('invalid');
+                    boothCodeError.style.display = 'none';
+                } else {
+                    // Invalid format - show red
+                    this.classList.add('input-invalid');
+                    this.classList.remove('input-valid');
+                    formatHint.classList.add('invalid');
+                    formatHint.classList.remove('valid');
+                    boothCodeError.textContent = 'Invalid format. Please use XX-W### format (e.g., UK-W123)';
+                    boothCodeError.style.display = 'block';
+                }
+            });
+            
+            loginForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                // Get form values
+                const boothCode = boothCodeInput.value.trim();
+                const password = passwordInput.value;
+                let isValid = true;
+                
+                // Reset error messages
+                boothCodeError.style.display = 'none';
+                passwordError.style.display = 'none';
+                authError.style.display = 'none';
+                
+                // Validate booth code format
+                if (!boothCode || !isValidBoothCode(boothCode)) {
+                    boothCodeError.textContent = boothCode ? 'Invalid format. Please use XX-W### format (e.g., UK-W123)' : 'Please enter a Booth Code';
+                    boothCodeError.style.display = 'block';
+                    boothCodeInput.classList.add('input-invalid');
+                    boothCodeInput.classList.remove('input-valid');
+                    isValid = false;
+                }
+                
+                // Validate password
+                if (!password) {
+                    passwordError.style.display = 'block';
+                    passwordInput.classList.add('input-invalid');
+                    isValid = false;
+                } else {
+                    passwordInput.classList.remove('input-invalid');
+                }
+                
+                if (isValid) {
+                    try {
+                        // Show loading indicator
+                        loadingIndicator.style.display = 'block';
+                        loginButton.disabled = true;
+                        
+                        console.log("Attempting login with booth code", boothCode);
+                        
+                        // Query Firestore for the booth code
+                        const boothsRef = db.collection('WARDS');
+                        const query = boothsRef.where('Wardnumber', '==', boothCode);
+                        
+                        try {
+                            const querySnapshot = await query.get();
+                            
+                            if (!querySnapshot.empty) {
+                                // We found a matching booth
+                                const boothDoc = querySnapshot.docs[0];
+                                const boothData = boothDoc.data();
+                                
+                                // Check if password field exists
+                                if (!boothData.hasOwnProperty('Password')) {
+                                    authError.textContent = 'System error: Booth data is invalid';
+                                    authError.style.display = 'block';
+                                    return;
+                                }
+                                
+                                // Check if password matches
+                                if (boothData.Password === password) {
+                                    console.log('Login successful');
+                                    // Redirect to the next page
+                                    window.location.href = 'scan_option.html';
+                                } else {
+                                    // Password doesn't match
+                                    authError.textContent = 'Invalid password';
+                                    authError.style.display = 'block';
+                                    passwordInput.classList.add('input-invalid');
+                                }
+                            } else {
+                                // No matching booth found
+                                authError.textContent = 'Booth code not found';
+                                authError.style.display = 'block';
+                                boothCodeInput.classList.add('input-invalid');
+                            }
+                        } catch (queryError) {
+                            console.error('Error querying documents:', queryError);
+                            authError.textContent = 'Error accessing booth data: ' + queryError.message;
+                            authError.style.display = 'block';
+                        }
+                    } catch (error) {
+                        console.error('Authentication error:', error);
+                        authError.textContent = 'Authentication failed: ' + error.message;
+                        authError.style.display = 'block';
+                    } finally {
+                        // Hide loading indicator
+                        loadingIndicator.style.display = 'none';
+                        loginButton.disabled = false;
+                    }
+                }
+            });
+            
+            // Back button functionality
+            document.getElementById('backButton').addEventListener('click', function() {
+                window.history.back();
+            });
+            
+        } catch (error) {
+            console.error("Firebase initialization error:", error);
+            document.getElementById('authError').textContent = 'Failed to initialize Firebase: ' + error.message;
+            document.getElementById('authError').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
