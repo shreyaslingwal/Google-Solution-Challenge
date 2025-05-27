@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voter Information Form</title>
+    <link rel="stylesheet" href="style/voter_login.css">
+</head>
+<body>
+    <div class="form-container">
+        <h1>Voter Login</h1>
+        
+        <div id="autoFillNotice" class="auto-fill-notice">
+            Your Voter ID has been automatically filled from your recent registration.
+        </div>
+        
+        <form id="userForm">
+            <div class="form-group">
+                <label for="name">Name:</label>
+                <input type="text" id="name" placeholder="Enter your full name" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="dob">Date of Birth:</label>
+                <input type="date" id="dob" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="vid">VID (Voter ID):</label>
+                <input type="text" id="vid" placeholder="Enter your Voter ID" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" placeholder="Enter your password" required>
+            </div>
+
+            <div class="password-toggle">
+                <input type="checkbox" id="showPassword" onclick="togglePasswordVisibility()">
+                <label for="showPassword">Show Password</label>
+              </div>
+            <div class="button-group">
+                <button type="submit" class="submit-btn">Submit</button>
+                <a href="javascript:void(0)" class="back-link" id="backButton" onclick="window.history.back()">← Back to previous page</a>
+            </div>
+            
+            <div id="errorMessage" class="error-message"></div>
+            <div id="successMessage" class="success-message">Information verified successfully!</div>
+            <div id="loading" class="loading">Processing</div>
+        </form>
+    </div>
+    
+    <!-- Firebase SDK -->
+    <script>
+        // Function to toggle password visibility
+        function togglePasswordVisibility() {
+        const passwordInput = document.getElementById("password");
+        const confirmPasswordInput = document.getElementById("confirmPassword");
+        const showPasswordCheckbox = document.getElementById("showPassword");
+        
+        if (showPasswordCheckbox.checked) {
+            passwordInput.type = "text";
+            confirmPasswordInput.type = "text";
+        } else {
+            passwordInput.type = "password";
+            confirmPasswordInput.type = "password";
+        }
+        }
+  </script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    
+    <script>
+        // Your Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyDLpqpT4DQAfoloD_S4nCDOq0bamjuVyBM",
+            authDomain: "voting-made-easy-55b34.firebaseapp.com",
+            projectId: "voting-made-easy-55b34",
+            storageBucket: "voting-made-easy-55b34.firebasestorage.app",
+            messagingSenderId: "88186548606",
+            appId: "1:88186548606:web:cdfa835053f1f0e64f032f",
+            measurementId: "G-491RJ3GNVB"
+        };
+        
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        
+        // Get a reference to the Firestore database and Auth
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+        
+        // Get form elements
+        const userForm = document.getElementById('userForm');
+        const nameInput = document.getElementById('name');
+        const dobInput = document.getElementById('dob');
+        const vidInput = document.getElementById('vid');
+        const passwordInput = document.getElementById('password');
+        const errorMessage = document.getElementById('errorMessage');
+        const successMessage = document.getElementById('successMessage');
+        const loadingIndicator = document.getElementById('loading');
+        const autoFillNotice = document.getElementById('autoFillNotice');
+        
+        // Check for VID in localStorage (from registration form)
+        document.addEventListener('DOMContentLoaded', function() {
+            const registeredVId = localStorage.getItem('registeredVId');
+            
+            if (registeredVId) {
+                // Fill the VID field with the VID from registration
+                vidInput.value = registeredVId;
+                autoFillNotice.style.display = 'block';
+                
+                // Fetch user data from Firebase based on the VID
+                db.collection('users').where('VId', '==', registeredVId).get()
+                    .then((querySnapshot) => {
+                        if (!querySnapshot.empty) {
+                            // We found a matching user with this VID
+                            const userData = querySnapshot.docs[0].data();
+                            
+                            // Auto-fill name and date of birth if available
+                            if (userData.fullName) {
+                                nameInput.value = userData.fullName;
+                            }
+                            
+                            if (userData.dob) {
+                                // Convert from dd/mm/yyyy to yyyy-mm-dd for the date input
+                                const dobParts = userData.dob.split('/');
+                                if (dobParts.length === 3) {
+                                    const formattedDob = `${dobParts[2]}-${dobParts[1]}-${dobParts[0]}`;
+                                    dobInput.value = formattedDob;
+                                }
+                            }
+                        }
+                    })
+                    .catch((error) => {
+                        console.error("Error fetching user data: ", error);
+                    });
+            }
+        });
+        
+        // Form submission handler
+        userForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Reset messages
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+            loadingIndicator.style.display = 'block';
+            
+            // Get form values
+            const name = nameInput.value.trim();
+            const dob = dobInput.value;
+            const vid = vidInput.value.trim();
+            const password = passwordInput.value;
+            
+            // Basic validation
+            if (!name || !dob || !vid || !password) {
+                showError('Please fill in all fields');
+                return;
+            }
+            
+            // Check directly in Firestore instead of using Firebase Auth
+            db.collection('users')
+                .where('VId', '==', vid)
+                .get()
+                .then((querySnapshot) => {
+                    if (querySnapshot.empty) {
+                        showError('No account found with this Voter ID. Please register first.');
+                        return;
+                    }
+                    
+                    // Get user data from the first matching document
+                    const userData = querySnapshot.docs[0].data();
+                    
+                    // Check if the password matches (assuming password is stored in Firestore)
+                    if (userData.password && userData.password === password) {
+                        // User authenticated successfully
+                        loadingIndicator.style.display = 'none';
+                        successMessage.style.display = 'block';
+                        
+                        // Store minimal user info in session storage for the active session
+                        const sessionData = {
+                            name: name,
+                            vid: vid,
+                            timestamp: new Date().toISOString()
+                        };
+                        sessionStorage.setItem('userData', JSON.stringify(sessionData));
+                        
+                        // Redirect to qr genration page after a short delay
+                        setTimeout(() => {
+                            window.location.href = 'qr.html';
+                        }, 1500);
+                    } else {
+                        showError('Incorrect password. Please try again.');
+                    }
+                })
+                .catch((error) => {
+                    showError('Authentication error: ' + error.message);
+                    console.error("Error during authentication:", error);
+                });
+        });
+        
+        // Helper function to show error
+        function showError(message) {
+            loadingIndicator.style.display = 'none';
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+        }
+        
+        // Check if VID exists in database when user inputs it
+        vidInput.addEventListener('blur', function() {
+            const vid = vidInput.value.trim();
+            if (vid) {
+                // Check in 'users' collection by VId (for auto-filling name and DOB)
+                db.collection('users').where('VId', '==', vid).get()
+                    .then((querySnapshot) => {
+                        if (!querySnapshot.empty) {
+                            const userData = querySnapshot.docs[0].data();
+                            
+                            // Auto-fill name and date of birth
+                            if (userData.fullName) {
+                                nameInput.value = userData.fullName;
+                            }
+                            
+                            if (userData.dob) {
+                                // Convert from dd/mm/yyyy to yyyy-mm-dd for the date input
+                                const dobParts = userData.dob.split('/');
+                                if (dobParts.length === 3) {
+                                    const formattedDob = `${dobParts[2]}-${dobParts[1]}-${dobParts[0]}`;
+                                    dobInput.value = formattedDob;
+                                }
+                            }
+                        }
+                    })
+                    .catch((error) => {
+                        console.error("Error checking user VId: ", error);
+                    });
+            }
+        });
+    </script>
+</body>
+</html>
