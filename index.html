@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Select Login Type</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link rel="stylesheet" href="style/index.css">
+  </head>
+ <body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    
+    <!-- QR Code Generator -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.0/build/qrcode.min.js"></script>
+<div class="container" id="container">
+	<div class="form-container sign-up-container" id="registerationForm">
+            <h2>Registration Form</h2>
+            <form id="registrationForm">
+                <div class="aadhaar-container" >
+                    <label for="aadhaar">Aadhaar Number:</label>
+                    <input type="text" id="aadhaar" name="aadhaar" placeholder="Enter your 12-digit Aadhaar number" maxlength="12" required>
+                    <div id="aadhaarError" class="error-message">Aadhaar number must be exactly 12 digits.</div>
+                    <button type="button" id="authenticateBtn">Authenticate</button>
+                </div>
+
+                <div id="aadhaarAuthMessage" class="error-message" style="margin-top:8px; margin-bottom: 8px;"></div>
+               
+                <div id="personalInfoSection" style="display: none;">
+                  <!-- Back button for changing Aadhaar number -->
+                  <button type="button" id="backToAadhaarBtn" ><--</button>
+         
+                  <label for="fullName">Full Name:</label>
+                  <input type="text" id="fullName" name="fullName" placeholder="Enter Full Name" required readonly>
+                  
+                  <label for="dob">Date of Birth:</label>
+                  <input type="date" id="dob" name="dob" required readonly>
+                  <div id="dobError" class="error-message">You must be at least 18 years old to register.</div>
+                  
+                  
+                  <label for="phone">Phone Number:</label>
+                  <input type="tel" id="phone" name="phone" placeholder="Enter your 10-digit phone number" maxlength="10" required>
+                  <div id="phoneError" class="error-message">Phone number must be exactly 10 digits.</div>
+                  
+                  <label for="password">Password:</label>
+                  <input type="password" id="password" name="password" placeholder="Enter your password" required>
+                  <div id="passwordStrength" class="password-strength"></div>
+                  <div id="passwordError" class="error-message">Password must be at least 8 characters with letters and numbers.</div>
+
+                  <label for="confirmPassword">Confirm Password:</label>
+                  <input type="password" id="confirmPassword" name="confirmPassword" placeholder="Confirm your password" required>
+                  <div id="confirmPasswordError" class="error-message">Passwords do not match.</div>
+                  
+                  <div class="password-toggle">
+                    <input type="checkbox" id="showPassword" onclick="togglePasswordVisibility()">
+                    <label for="showPassword">Show Password</label>
+                  </div>
+                  
+                  <button type="submit" id="submitBtn">Register</button>
+                </div>
+              </form>
+              <div id="statusMessage" class="status-message"></div>
+              <!-- <div class="login-link">
+                <p>Already registered? <a href="voter_login.html">Login here</a></p>
+              </div> -->
+              <!-- Load Firebase from CDN -->
+
+              <script>
+                    // Function to toggle password visibility
+                    function togglePasswordVisibility() {
+                    const passwordInput = document.getElementById("password");
+                    const confirmPasswordInput = document.getElementById("confirmPassword");
+                    const showPasswordCheckbox = document.getElementById("showPassword");
+                    
+                    if (showPasswordCheckbox.checked) {
+                        passwordInput.type = "text";
+                        confirmPasswordInput.type = "text";
+                    } else {
+                        passwordInput.type = "password";
+                        confirmPasswordInput.type = "password";
+                    }
+                    }
+              </script>
+              <script type="module">
+                import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+                import { getFirestore, collection, addDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+                    
+                try {
+                    // Your Firebase configuration
+                    const firebaseConfig = {
+                        apiKey: "AIzaSyDLpqpT4DQAfoloD_S4nCDOq0bamjuVyBM",
+                        authDomain: "voting-made-easy-55b34.firebaseapp.com",
+                        projectId: "voting-made-easy-55b34",
+                        storageBucket: "voting-made-easy-55b34.firebasestorage.app",
+                        messagingSenderId: "88186548606",
+                        appId: "1:88186548606:web:cdfa835053f1f0e64f032f",
+                        measurementId: "G-491RJ3GNVB"
+                    };
+                    
+                    // Initialize Firebase
+                    const app = initializeApp(firebaseConfig);
+                    
+                    // Initialize Firestore
+                    const db = getFirestore(app);
+                    
+                    // Global variable to track if Aadhaar is authenticated
+                    let isAadhaarAuthenticated = false;
+                    
+                    // Function to show status messages
+                    function showMessage(message, isSuccess, VId = null) {
+                        const statusElement = document.getElementById("statusMessage");
+                        if (VId) {
+                            statusElement.innerHTML = `
+                                ${message}
+                                <div class="id-field">${VId}</div>
+                                <p>Please save this ID for your records.</p>
+                                <p>Redirecting to login page in 3 seconds...</p>
+                            `;
+                            
+                            // Save VId to localStorage so it can be accessed on the login page
+                            localStorage.setItem('registeredVId', VId);
+                            
+                            // Set timeout to redirect to voter login page after 3 seconds
+                            setTimeout(() => {
+                                window.location.href = "index.html"; // Redirect to voterloginclick.html
+                            }, 3000);
+                        } else {
+                            statusElement.textContent = message;
+                        }
+                        statusElement.className = isSuccess ? "status-message success" : "status-message error";
+                        statusElement.style.display = "block";
+                    }
+                    
+                    // Aadhaar authentication function
+                    async function authenticateAadhaar() {
+                        const aadhaarNumber = document.getElementById("aadhaar").value;
+                        const authMessageElem = document.getElementById("aadhaarAuthMessage");
+                        const authenticateBtn = document.getElementById("authenticateBtn");
+                        const personalInfoSection = document.getElementById("personalInfoSection");
+                        
+                        // Reset authentication status
+                        isAadhaarAuthenticated = false;
+                        
+                        // Clear previous messages
+                        authMessageElem.textContent = "";
+                        authMessageElem.style.display = "none";
+                        authMessageElem.className = "error-message";
+                        
+                        // Validate Aadhaar format first
+                        if (!validateAadhaar(aadhaarNumber)) {
+                            authMessageElem.textContent = "Aadhaar number must be exactly 12 digits.";
+                            authMessageElem.style.display = "block";
+                            return;
+                        }
+                        
+                        // Disable button during authentication
+                        authenticateBtn.disabled = true;
+                        authenticateBtn.textContent = "Authenticating...";
+                        
+                        try {
+                            // Create a query against the aadhaar collection
+                            const aadhaarCollection = collection(db, "aadhaar");
+                            const q = query(aadhaarCollection, where("aadhaar", "==", aadhaarNumber));
+                            
+                            // Execute the query
+                            const querySnapshot = await getDocs(q);
+                            
+                            // Check if we found a matching document
+                            if (!querySnapshot.empty) {
+                                // Get the first document (should be only one matching the Aadhaar)
+                                const aadhaarDoc = querySnapshot.docs[0];
+                                const aadhaarData = aadhaarDoc.data();
+                                
+                                // Check if this Aadhaar is already registered with a user
+                                const usersCollection = collection(db, "users");
+                                const userQuery = query(usersCollection, where("aadhaar", "==", aadhaarNumber));
+                                const userQuerySnapshot = await getDocs(userQuery);
+                                
+                                if (!userQuerySnapshot.empty) {
+                                    authMessageElem.textContent = "This Aadhaar number is already registered.";
+                                    authMessageElem.className = "error-message";
+                                    authMessageElem.style.color = "#a94442"; // Error red color
+                                    authMessageElem.style.display = "block";
+                                    isAadhaarAuthenticated = false;
+                                    personalInfoSection.style.display = "none";
+                                } else {
+                                    // Aadhaar found and not already registered
+                                    isAadhaarAuthenticated = true;
+                                    authMessageElem.textContent = "Aadhaar verified successfully!";
+                                    authMessageElem.className = "error-message success";
+                                    authMessageElem.style.color = "#3c763d"; // Success green color
+                                    authMessageElem.style.display = "block";
+                                    
+                                    // Show the rest of the form
+                                    personalInfoSection.style.display = "block";
+                                    
+                                    // Populate name and DOB from Aadhaar data
+                                    const fullNameInput = document.getElementById("fullName");
+                                    const dobInput = document.getElementById("dob");
+                                    
+                                    // Set values from Aadhaar database
+                                    fullNameInput.value = aadhaarData.fullName|| "";
+                                    
+                                    // Convert date format from DD/MM/YYYY to YYYY-MM-DD for the date input
+                                    if (aadhaarData.dob) {
+                                        const dobParts = aadhaarData.dob.split('/');
+                                        if (dobParts.length === 3) {
+                                            const formattedDob = `${dobParts[2]}-${dobParts[1]}-${dobParts[0]}`;
+                                            dobInput.value = formattedDob;
+                                            
+                                            // Validate age
+                                            const age = calculateAge(formattedDob);
+                                            if (age < 18) {
+                                                dobError.style.display = "block";
+                                                dobInput.classList.add("error");
+                                                isAadhaarAuthenticated = false;
+                                                authMessageElem.textContent = "You must be at least 18 years old to register.";
+                                                authMessageElem.className = "error-message";
+                                                authMessageElem.style.color = "#a94442"; // Error red color
+                                            } else {
+                                                dobError.style.display = "none";
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Aadhaar not found in database
+                                authMessageElem.textContent = "Aadhaar verification failed. Number not found.";
+                                authMessageElem.style.display = "block";
+                                personalInfoSection.style.display = "none";
+                            }
+                        } catch (error) {
+                            console.error("Error authenticating Aadhaar:", error);
+                            authMessageElem.textContent = "Authentication error: " + error.message;
+                            authMessageElem.style.display = "block";
+                            personalInfoSection.style.display = "none";
+                        } finally {
+                            // Re-enable button
+                            authenticateBtn.disabled = false;
+                            authenticateBtn.textContent = "Authenticate";
+                        }
+                    }
+                    
+                    // Add event listener to authenticate button
+                    const authenticateBtn = document.getElementById("authenticateBtn");
+                    authenticateBtn.addEventListener("click", authenticateAadhaar);
+                    
+                    // Add event listener to back button
+                    const backToAadhaarBtn = document.getElementById("backToAadhaarBtn");
+                    backToAadhaarBtn.addEventListener("click", function() {
+                        // Reset authentication status
+                        isAadhaarAuthenticated = false;
+                        
+                        // Hide personal info section
+                        const personalInfoSection = document.getElementById("personalInfoSection");
+                        personalInfoSection.style.display = "none";
+                        
+                        // Clear auth message
+                        const authMessageElem = document.getElementById("aadhaarAuthMessage");
+                        authMessageElem.textContent = "";
+                        authMessageElem.style.display = "none";
+                        
+                        // Focus back on Aadhaar input field
+                        const aadhaarInput = document.getElementById("aadhaar");
+                        aadhaarInput.focus();
+                        
+                        // Re-enable Aadhaar input if it was disabled
+                        aadhaarInput.readOnly = false;
+                        
+                        // Reset message section
+                        const statusElement = document.getElementById("statusMessage");
+                        statusElement.style.display = "none";
+                    });
+                    
+                    // Function to generate a numeric unique identifier
+                    function generateUniqueId() {
+                        const timestamp = Date.now();
+                        const randomPart = Math.floor(10000 + Math.random() * 90000);
+                        const timestampPart = timestamp % 100000;
+                        return `${timestampPart}${randomPart}`;
+                    }
+            
+                    // Function to format date from "yyyy-mm-dd" to "dd/mm/yyyy"
+                    function formatDate(dateStr) {
+                        const parts = dateStr.split("-");
+                        if (parts.length !== 3) return dateStr;
+                        const [year, month, day] = parts;
+                        return `${day}/${month}/${year}`;
+                    }
+                    
+                    // Function to calculate age from DOB
+                    function calculateAge(dob) {
+                        const birthDate = new Date(dob);
+                        const today = new Date();
+                        let age = today.getFullYear() - birthDate.getFullYear();
+                        const monthDifference = today.getMonth() - birthDate.getMonth();
+                        
+                        if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < birthDate.getDate())) {
+                            age--;
+                        }
+                        
+                        return age;
+                    }
+                    
+                    // Calculate maximum allowed DOB for 18+ users
+                    function getMaxDOB() {
+                        const today = new Date();
+                        const maxDate = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
+                        return maxDate.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+                    }
+                    
+                    // Validate phone number (must be exactly 10 digits)
+                    function validatePhone(phone) {
+                        const phoneRegex = /^\d{10}$/;
+                        return phoneRegex.test(phone);
+                    }
+                    
+                    // Validate Aadhaar number (must be exactly 12 digits)
+                    function validateAadhaar(aadhaar) {
+                        const aadhaarRegex = /^\d{12}$/;
+                        return aadhaarRegex.test(aadhaar);
+                    }
+                    
+                    // Validate password (at least 8 characters with letters and numbers)
+                    function validatePassword(password) {
+                        // At least 8 characters with at least one letter and one number
+                        const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]{8,}$/;
+                        return passwordRegex.test(password);
+                    }
+                    
+                    // Function to check password strength
+                    function checkPasswordStrength(password) {
+                        const strengthElement = document.getElementById("passwordStrength");
+                        
+                        if (password.length === 0) {
+                            strengthElement.textContent = "";
+                            return;
+                        }
+                        
+                        let strength = 0;
+                        
+                        // Check for length
+                        if (password.length >= 8) strength += 1;
+                        if (password.length >= 12) strength += 1;
+                        
+                        // Check for character types
+                        if (/[A-Z]/.test(password)) strength += 1;
+                        if (/[a-z]/.test(password)) strength += 1;
+                        if (/\d/.test(password)) strength += 1;
+                        if (/[^A-Za-z0-9]/.test(password)) strength += 1;
+                        
+                        // Display strength message
+                        if (strength <= 2) {
+                            strengthElement.textContent = "Password strength: Weak";
+                            strengthElement.className = "password-strength weak";
+                        } else if (strength <= 4) {
+                            strengthElement.textContent = "Password strength: Medium";
+                            strengthElement.className = "password-strength medium";
+                        } else {
+                            strengthElement.textContent = "Password strength: Strong";
+                            strengthElement.className = "password-strength strong";
+                        }
+                    }
+                    
+                    // Force numeric input only for phone and aadhaar
+                    const phoneInput = document.getElementById("phone");
+                    phoneInput.addEventListener("keypress", function(e) {
+                        // Allow only numbers (key codes 48-57 are digits 0-9)
+                        const charCode = (e.which) ? e.which : e.keyCode;
+                        if (charCode > 31 && (charCode < 48 || charCode > 57)) {
+                            e.preventDefault();
+                            return false;
+                        }
+                        return true;
+                    });
+                    
+                    const aadhaarInput = document.getElementById("aadhaar");
+                    aadhaarInput.addEventListener("keypress", function(e) {
+                        // Allow only numbers (key codes 48-57 are digits 0-9)
+                        const charCode = (e.which) ? e.which : e.keyCode;
+                        if (charCode > 31 && (charCode < 48 || charCode > 57)) {
+                            e.preventDefault();
+                            return false;
+                        }
+                        return true;
+                    });
+                    
+                    // Reset authentication status when Aadhaar number is changed
+                    aadhaarInput.addEventListener("input", function() {
+                        // Remove any non-numeric characters that might have been pasted
+                        this.value = this.value.replace(/\D/g, '');
+                        
+                        const aadhaarError = document.getElementById("aadhaarError");
+                        const authMessageElem = document.getElementById("aadhaarAuthMessage");
+                        const personalInfoSection = document.getElementById("personalInfoSection");
+                        
+                        // Reset authentication status
+                        isAadhaarAuthenticated = false;
+                        authMessageElem.style.display = "none";
+                        personalInfoSection.style.display = "none";
+                        
+                        if (this.value.length > 0 && this.value.length !== 12) {
+                            aadhaarError.style.display = "block";
+                            this.classList.add("error");
+                        } else {
+                            aadhaarError.style.display = "none";
+                            this.classList.remove("error");
+                        }
+                    });
+                    
+                    // Add input validation for phone number
+                    const phoneError = document.getElementById("phoneError");
+                    
+                    phoneInput.addEventListener("input", function() {
+                        // Remove any non-numeric characters that might have been pasted
+                        this.value = this.value.replace(/\D/g, '');
+                        
+                        if (this.value.length > 0 && this.value.length !== 10) {
+                            phoneError.style.display = "block";
+                            this.classList.add("error");
+                        } else {
+                            phoneError.style.display = "none";
+                            this.classList.remove("error");
+                        }
+                    });
+                    
+                    phoneInput.addEventListener("blur", function() {
+                        if (this.value.length > 0 && this.value.length !== 10) {
+                            phoneError.style.display = "block";
+                            this.classList.add("error");
+                        }
+                    });
+                    
+                    // Add input validation for Aadhaar number
+                    const aadhaarError = document.getElementById("aadhaarError");
+                    
+                    aadhaarInput.addEventListener("blur", function() {
+                        if (this.value.length > 0 && this.value.length !== 12) {
+                            aadhaarError.style.display = "block";
+                            this.classList.add("error");
+                        }
+                    });
+                    
+                    // Add validation for password
+                    const passwordInput = document.getElementById("password");
+                    const passwordError = document.getElementById("passwordError");
+                    
+                    passwordInput.addEventListener("input", function() {
+                        checkPasswordStrength(this.value);
+                        
+                        if (!validatePassword(this.value) && this.value.length > 0) {
+                            passwordError.style.display = "block";
+                            this.classList.add("error");
+                        } else {
+                            passwordError.style.display = "none";
+                            this.classList.remove("error");
+                        }
+                        
+                        // Check if confirm password matches if it has a value
+                        const confirmPasswordInput = document.getElementById("confirmPassword");
+                        const confirmPasswordError = document.getElementById("confirmPasswordError");
+                        
+                        if (confirmPasswordInput.value.length > 0) {
+                            if (this.value !== confirmPasswordInput.value) {
+                                confirmPasswordError.style.display = "block";
+                                confirmPasswordInput.classList.add("error");
+                            } else {
+                                confirmPasswordError.style.display = "none";
+                                confirmPasswordInput.classList.remove("error");
+                            }
+                        }
+                    });
+                    
+                    // Add validation for confirm password
+                    const confirmPasswordInput = document.getElementById("confirmPassword");
+                    const confirmPasswordError = document.getElementById("confirmPasswordError");
+                    
+                    confirmPasswordInput.addEventListener("input", function() {
+                        const passwordInput = document.getElementById("password");
+                        
+                        if (this.value !== passwordInput.value) {
+                            confirmPasswordError.style.display = "block";
+                            this.classList.add("error");
+                        } else {
+                            confirmPasswordError.style.display = "none";
+                            this.classList.remove("error");
+                        }
+                    });
+                    
+                    // Verify the form exists
+                    const form = document.getElementById("registrationForm");
+                    
+                    if (form) {
+                        // Handle form submission
+                        form.addEventListener("submit", async (e) => {
+                            e.preventDefault();
+                            
+                            // Get form values
+                            const fullName = document.getElementById("fullName").value;
+                            const dobValue = document.getElementById("dob").value;
+                            const phone = document.getElementById("phone").value;
+                            const aadhaar = document.getElementById("aadhaar").value;
+                            const password = document.getElementById("password").value;
+                            const confirmPassword = document.getElementById("confirmPassword").value;
+                            
+                            // Validate all fields before submission
+                            let isValid = true;
+                            
+                            // Check if Aadhaar is authenticated before allowing submission
+                            if (!isAadhaarAuthenticated) {
+                                const authMessageElem = document.getElementById("aadhaarAuthMessage");
+                                authMessageElem.textContent = "Please authenticate your Aadhaar number before submitting.";
+                                authMessageElem.style.display = "block";
+                                authMessageElem.style.color = "#a94442"; // Error red color
+                                isValid = false;
+                            }
+                            
+                            // Phone validation
+                            if (!validatePhone(phone)) {
+                                phoneError.style.display = "block";
+                                phoneInput.classList.add("error");
+                                isValid = false;
+                            }
+                            
+                            // Password validation
+                            if (!validatePassword(password)) {
+                                passwordError.style.display = "block";
+                                passwordInput.classList.add("error");
+                                isValid = false;
+                            }
+                            
+                            // Confirm password validation
+                            if (password !== confirmPassword) {
+                                confirmPasswordError.style.display = "block";
+                                confirmPasswordInput.classList.add("error");
+                                isValid = false;
+                            }
+                            
+                            if (!isValid) {
+                                showMessage("Please correct the errors in the form before submitting.", false);
+                                return; // Don't proceed if validation fails
+                            }
+                            
+                            // Disable submit button to prevent multiple submissions
+                            const submitBtn = document.getElementById("submitBtn");
+                            submitBtn.disabled = true;
+                            submitBtn.textContent = "Registering...";
+                            
+                            try {
+                                // Format the date
+                                const dob = formatDate(dobValue);
+                                
+                                // Generate a unique numeric ID
+                                const VId = generateUniqueId();
+                                
+                                // Create collection reference
+                                const usersCollection = collection(db, "users");
+                                
+                                // Prepare user data with the unique ID included
+                                // Note: In a real application, you should hash the password
+                                // before storing it. This is just a simplified example.
+                                const userData = {
+                                    fullName,
+                                    dob,
+                                    phone,
+                                    aadhaar,
+                                    password, // In production, always hash passwords
+                                    VId,
+                                    registrationTimestamp: new Date(),
+                                    aadhaarVerified: true
+                                };
+                                
+                                // Add document to Firestore
+                                const docRef = await addDoc(usersCollection, userData);
+                                
+                                // Log the operation for debugging
+                                console.log("Document written with ID: ", docRef.id);
+                                console.log("User data with VId: ", userData);
+            
+            
+                                
+                                // Show success message with the unique ID
+                                showMessage("Registration successful! Your unique ID is:", true, VId);
+                                generateVoterCard(fullName, dob, VId);
+
+
+                                
+                                                    // function generateVoterCard(fullName, dob, VId) {
+                                                    //     let { jsPDF } = window.jspdf;
+                                                    //     let doc = new jsPDF();
+            
+                                                    //     // Set PDF styling
+                                                    //     doc.setFont("helvetica", "bold");
+                                                    //     doc.setFontSize(22);
+                                                    //     doc.text("Voter ID Card", 70, 20);
+            
+                                                    //     doc.setFontSize(14);
+                                                    //     doc.setFont("helvetica", "normal");
+                                                    //     doc.text(`Name: ${fullName}`, 20, 40);
+                                                    //     doc.text(`Date of Birth: ${dob}`, 20, 50);
+                                                    //     doc.text(`Voter ID: ${VId}`, 20, 60);
+            
+                                                    //     // Auto-download the PDF
+                                                    //     doc.save(`${fullName}_Voter_ID_Card.pdf`);
+                                                    // }
+                                                    function generateVoterCard(fullName, dob, VId, aadhaar) {
+    // Ensure jsPDF is loaded
+    if (!window.jspdf) {
+        console.error('jsPDF library not loaded');
+        return;
+    }
+
+    let { jsPDF } = window.jspdf;
+    const doc = new jsPDF({
+        orientation: "landscape",
+        unit: "mm",
+        format: [85, 54] // Standard ID card size (3.375" x 2.125")
+    });
+    
+    // Function to encrypt voter data securely
+    function encryptData(data) {
+        const encKey = "VoterSecureAppKey2025";
+        return CryptoJS.AES.encrypt(JSON.stringify(data), encKey).toString();
+    }
+    
+    // Calculate QR code expiration (1 year from now)
+    const qrExpiration = new Date();
+    qrExpiration.setFullYear(qrExpiration.getFullYear() + 1);
+    
+    // Prepare secure voter data for QR code - exclude full Aadhaar
+    const voterData = {
+        name: fullName || '',
+        dob: dob || '',
+        vid: VId,
+        aadhaarVerified: !!aadhaar, // Boolean flag only
+        exp: qrExpiration.toISOString() // Expiration timestamp
+    };
+    
+    // Encrypt the voter data
+    const encryptedData = encryptData(voterData);
+    
+    // Set background color
+    doc.setFillColor(245, 245, 245);
+    doc.rect(0, 0, 85, 54, 'F');
+    
+    // Add header background
+    doc.setFillColor(7, 43, 95);
+    doc.rect(0, 0, 85, 12, 'F');
+    
+    // Add orange strip below header
+    doc.setFillColor(255, 153, 51);
+    doc.rect(0, 12, 85, 1.5, 'F');
+    
+    // Add header text
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.text("VOTER IDENTIFICATION CARD", 42.5, 8, { align: "center" });
+    
+    // Add content
+    doc.setTextColor(7, 43, 95);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.text("Name:", 5, 20);
+    doc.text("Date of Birth:", 5, 26);
+    doc.text("Voter ID:", 5, 32);
+    
+    doc.setFont("helvetica", "normal");
+    doc.text(fullName, 25, 20);
+    doc.text(dob, 25, 26);
+    doc.setFont("helvetica", "bold");
+    doc.text(VId, 25, 32);
+    
+    // Generate QR Code
+    const qrCanvas = document.createElement('canvas');
+    QRCode.toCanvas(qrCanvas, encryptedData, {
+        width: 60,
+        margin: 1,
+        color: {
+            dark: '#000',
+            light: '#fff'
+        }
+    });
+    
+    // Convert canvas to image
+    const qrImage = qrCanvas.toDataURL('image/png');
+    
+    // Add QR Code to PDF
+    doc.addImage(qrImage, 'PNG', 60, 15, 20, 20);
+    
+    // Add footer
+    doc.setDrawColor(200, 200, 200);
+    doc.line(5, 40, 80, 40);
+    doc.setFontSize(6);
+    doc.setTextColor(100, 100, 100);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Issued: ${new Date().toLocaleDateString()}`, 42.5, 48, { align: "center" });
+    
+    // Trigger download using browser's method
+    try {
+        // Use browser's download method
+        doc.save(`${fullName}_Voter_ID_Card.pdf`);
+        
+        // Fallback method if save doesn't work
+        const pdfBlob = doc.output('blob');
+        const pdfUrl = URL.createObjectURL(pdfBlob);
+        
+        // Create a temporary link and trigger download
+        const link = document.createElement('a');
+        link.href = pdfUrl;
+        link.download = `${fullName}_Voter_ID_Card.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        // Clean up
+        URL.revokeObjectURL(pdfUrl);
+    } catch (error) {
+        console.error('Error downloading PDF:', error);
+        alert('Could not download PDF. Please check your browser settings.');
+    }
+}         
+                                form.reset();
+                            } catch (error) {
+                                console.error("Error adding document: ", error);
+                                showMessage("Registration failed: " + error.message, false);
+                            } finally {
+                                // Re-enable submit button
+                                submitBtn.disabled = false;
+                                submitBtn.textContent = "Register";
+                            }
+                        });
+                    } else {
+                        showMessage("Registration form not found in the document!", false);
+                    }
+                } catch (setupError) {
+                    console.error("Setup error: ", setupError);
+                    showMessage("Setup failed: " + setupError.message, false);
+                }
+              </script>
+		</form>
+	</div>
+	<div class="form-container sign-in-container">
+		<form action="#">
+            <h1>Login</h1>
+            <div class="options-container">
+                <div class="option-wrapper">
+                    <button type="button" class="option-button" onclick="window.location.href='voter_login.html'">
+                        Voter Login
+                        <span class="info-icon" title="For registered voters to access their voting portal">i</span>
+                    </button>
+                    <div class="tooltip">For registered voters to access their voting portal, view election information, and download your QR code.</div>
+                </div>
+    
+                <div class="option-wrapper">
+                    <button type="button" class="option-button" onclick="window.location.href='Boothlogin.html'">
+                        Booth Login
+                        <span class="info-icon" title="For election officials at voting booths">i</span>
+                    </button>
+                    <div class="tooltip">For election officials and poll workers to manage voting operations at polling stations.</div>
+                </div>
+            </div>
+		</form>
+	</div>
+	<div class="overlay-container">
+		<div class="overlay">
+			<div class="overlay-panel overlay-left">
+				<h1>Welcome !</h1>
+				<p>Enter your Aadhaar number for Verification</p>
+				<button class="ghost" id="signIn">Login </button>
+			</div>
+			<div class="overlay-panel overlay-right">
+				<h1>Hello Voters!</h1>
+				<p>Your vote is your voice—speak up, stand tall, and shape the future! 🗳️✨</p>
+				<button class="ghost" id="signUp">Registration</button>
+			</div>
+		</div>
+	</div>
+</div>
+<script> 
+ const signUpButton = document.getElementById('signUp');
+ const signInButton = document.getElementById('signIn');
+const container = document.getElementById('container');
+
+ signUpButton.addEventListener('click', () => {
+ 	container.classList.add("right-panel-active");
+ });
+
+ signInButton.addEventListener('click', () => {
+ 	container.classList.remove("right-panel-active");
+ });
+ 
+ 
+
+</script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+</body>
+</html>
