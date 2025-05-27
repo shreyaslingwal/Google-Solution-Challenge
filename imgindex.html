@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Detection Camera</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f0f0f0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .video-container {
+            position: relative;
+            width: 100%;
+            overflow: hidden;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            background-color: #000;
+        }
+        
+        #video {
+            width: 100%;
+            display: block;
+            transform: scaleX(-1); /* Mirror the video */
+        }
+        
+        #canvas {
+            display: none;
+        }
+        
+        #photo {
+            width: 100%;
+            border-radius: 8px;
+            display: none;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .btn {
+            padding: 12px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        
+        .btn:hover {
+            background-color: #3e8e41;
+        }
+        
+        .btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        
+        #saveBtn {
+            background-color: #2196F3;
+        }
+        
+        #saveBtn:hover {
+            background-color: #0b7dda;
+        }
+        
+        #newBtn {
+            background-color: #ff9800;
+        }
+        
+        #newBtn:hover {
+            background-color: #e68a00;
+        }
+        
+        .face-box {
+            position: absolute;
+            border: 3px solid #4CAF50;
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5);
+            border-radius: 2px;
+        }
+        
+        .status {
+            text-align: center;
+            margin-bottom: 15px;
+            font-size: 18px;
+            color: #555;
+        }
+        
+        .detection-off {
+            color: #f44336;
+        }
+        
+        .detection-on {
+            color: #4CAF50;
+        }
+        
+        #download-link {
+            display: none;
+        }
+        
+        #server-status {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 14px;
+        }
+        
+        #voter-id-display {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background-color: #e3f2fd;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 16px;
+            color: #0d47a1;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Face Detection Camera</h1>
+    
+    <div class="container">
+        <div class="status">
+            <span id="status-text" class="detection-off">Starting camera...</span>
+        </div>
+        
+        <div id="voter-id-display">Voter ID: <span id="voter-id">Not detected</span></div>
+        
+        <div class="video-container">
+            <video id="video" autoplay playsinline></video>
+            <canvas id="canvas"></canvas>
+        </div>
+        
+        <img id="photo" alt="Captured photo">
+        
+        <div class="controls">
+            <button id="captureBtn" class="btn" disabled>Capture Photo</button>
+            <button id="saveBtn" class="btn" disabled>Save to File</button>
+            <button id="newBtn" class="btn" disabled>New Photo</button>
+        </div>
+        
+        <a id="download-link"></a>
+        
+        <div id="server-status">
+            Server Status: <span id="status-indicator">Not Connected</span>
+        </div>
+    </div>
+    
+    <script>
+        // Global variables
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const photo = document.getElementById('photo');
+        const captureBtn = document.getElementById('captureBtn');
+        const saveBtn = document.getElementById('saveBtn');
+        const newBtn = document.getElementById('newBtn');
+        const statusText = document.getElementById('status-text');
+        const voterIdElement = document.getElementById('voter-id');
+        const ctx = canvas.getContext('2d');
+        const videoContainer = document.querySelector('.video-container');
+        const downloadLink = document.getElementById('download-link');
+        const serverStatusIndicator = document.getElementById('status-indicator');
+        
+        let stream = null;
+        let faceDetectionInterval = null;
+        let faceDetector = null;
+        let photoTaken = false;
+        let ws = null;
+        
+        // Get voter ID from session storage if available
+        const voterId = sessionStorage.getItem('voterIdForImage');
+        if (voterId) {
+            voterIdElement.textContent = voterId;
+        }
+        
+        // Initialize face detection API if available
+        async function initFaceDetection() {
+            try {
+                if ('FaceDetector' in window) {
+                    faceDetector = new FaceDetector({ fastMode: true });
+                    statusText.textContent = 'Face detection ready. Position your face in the camera.';
+                    statusText.className = 'detection-on';
+                    return true;
+                } else {
+                    // Remove the unwanted message and replace with something else or leave it empty
+                    statusText.textContent = 'Camera ready. Position your face and take a photo.';
+                    return false;
+                }
+            } catch (error) {
+                console.error('Face detection error:', error);
+                // Also modify this message
+                statusText.textContent = 'Camera ready. Click to take a photo.';
+                return false;
+            }
+        }
+        
+        // Start webcam
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        facingMode: 'user' 
+                    }, 
+                    audio: false 
+                });
+                
+                video.srcObject = stream;
+                
+                // Wait for video to be ready
+                await new Promise(resolve => {
+                    video.onloadedmetadata = resolve;
+                });
+                
+                // Set canvas size to match video
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                
+                captureBtn.disabled = false;
+                
+                const faceDetectionSupported = await initFaceDetection();
+                if (faceDetectionSupported) {
+                    startFaceDetection();
+                }
+                
+                // Connect to local server
+                connectToServer();
+                
+            } catch (error) {
+                console.error('Error accessing the camera:', error);
+                statusText.textContent = 'Error accessing the camera. Please check permissions.';
+            }
+        }
+        
+        // Detect faces and draw boxes
+        async function detectFaces() {
+            if (!faceDetector || !stream || photoTaken) return;
+            
+            try {
+                // Clear previous face boxes
+                const oldBoxes = videoContainer.querySelectorAll('.face-box');
+                oldBoxes.forEach(box => box.remove());
+                
+                const faces = await faceDetector.detect(video);
+                
+                if (faces && faces.length > 0) {
+                    faces.forEach(face => {
+                        const { boundingBox } = face;
+                        
+                        // Create box element
+                        const box = document.createElement('div');
+                        box.className = 'face-box';
+                        
+                        // Position the box based on the detected face
+                        box.style.left = `${boundingBox.left}px`;
+                        box.style.top = `${boundingBox.top}px`;
+                        box.style.width = `${boundingBox.width}px`;
+                        box.style.height = `${boundingBox.height}px`;
+                        
+                        // Adjust for video mirroring
+                        box.style.transform = 'scaleX(-1)';
+                        box.style.transformOrigin = 'center';
+                        
+                        videoContainer.appendChild(box);
+                    });
+                }
+            } catch (error) {
+                console.error('Face detection error:', error);
+            }
+        }
+        
+        // Start continuous face detection
+        function startFaceDetection() {
+            if (faceDetectionInterval) clearInterval(faceDetectionInterval);
+            faceDetectionInterval = setInterval(detectFaces, 100);
+        }
+        
+        // Capture photo from video
+        function capturePhoto() {
+            if (!stream) return;
+            
+            const width = video.videoWidth;
+            const height = video.videoHeight;
+            
+            // Draw the video frame to the canvas
+            ctx.save();
+            // Flip the image horizontally to correct the mirror effect
+            ctx.translate(width, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(video, 0, 0, width, height);
+            ctx.restore();
+            
+            // Convert canvas to data URL and display in the image element
+            const dataUrl = canvas.toDataURL('image/jpeg');
+            photo.src = dataUrl;
+            photo.style.display = 'block';
+            
+            // Hide video, show image
+            video.style.display = 'none';
+            
+            // Update button states
+            captureBtn.disabled = true;
+            saveBtn.disabled = false;
+            newBtn.disabled = false;
+            
+            photoTaken = true;
+            statusText.textContent = 'Photo captured! Click "Save to File" to save it.';
+        }
+        
+        // Reset for a new photo
+        function newPhoto() {
+            // Show video, hide image
+            video.style.display = 'block';
+            photo.style.display = 'none';
+            
+            // Update button states
+            captureBtn.disabled = false;
+            saveBtn.disabled = true;
+            newBtn.disabled = true;
+            
+            photoTaken = false;
+            statusText.textContent = 'Position your face and click "Capture Photo".';
+            
+            if (faceDetector) {
+                statusText.className = 'detection-on';
+            }
+        }
+        
+        // Connect to local WebSocket server
+        function connectToServer() {
+    try {
+        // Update WebSocket connection to use port 8888
+        ws = new WebSocket('ws://localhost:8888');
+        console.log('Attempting to connect to WebSocket server on port 8888...');
+        
+        ws.onopen = () => {
+            console.log('WebSocket connection established successfully');
+            serverStatusIndicator.textContent = 'Connected';
+            serverStatusIndicator.style.color = '#4CAF50';
+        };
+        
+        ws.onmessage = (event) => {
+            console.log('Received message from server:', event.data);
+            try {
+                const response = JSON.parse(event.data);
+                if (response.type === 'success') {
+                    // Green for successful verification
+                    statusText.textContent = response.message;
+                    statusText.style.color = '#4CAF50';
+                } else if (response.type === 'error') {
+                    // Red for failed verification
+                    statusText.textContent = response.message;
+                    statusText.style.color = '#f44336';
+                } else if (response.type === 'status') {
+                    console.log('Server status message:', response.message);
+                }
+            } catch (error) {
+                console.error('Error parsing server message:', error);
+            }
+        };
+                
+                ws.onclose = (event) => {
+                    console.log('WebSocket connection closed. Code:', event.code, 'Reason:', event.reason);
+                    serverStatusIndicator.textContent = 'Disconnected';
+                    serverStatusIndicator.style.color = '#f44336';
+                    
+                    // Try to reconnect after a delay
+                    setTimeout(() => {
+                        console.log('Attempting to reconnect...');
+                        connectToServer();
+                    }, 5000);
+                };
+                
+                ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    serverStatusIndicator.textContent = 'Connection Error';
+                    serverStatusIndicator.style.color = '#f44336';
+                };
+            } catch (error) {
+                console.error('Error setting up WebSocket connection:', error);
+                serverStatusIndicator.textContent = 'Setup Error';
+                serverStatusIndicator.style.color = '#f44336';
+                
+                // Try to reconnect after a delay
+                setTimeout(() => {
+                    console.log('Attempting to reconnect after error...');
+                    connectToServer();
+                }, 5000);
+            }
+        }
+        
+        // Save the photo via WebSocket server or fallback to download
+        function savePhoto() {
+            const dataUrl = photo.src;
+            
+            // Use voter ID for filename if available
+            const currentVoterId = voterId || '';
+            let filename;
+            
+            if (currentVoterId) {
+                // If voter ID exists, use it as the filename
+                filename = `${currentVoterId}.jpeg`;
+            } else {
+                // Otherwise use timestamp as before
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                filename = `face_photo_${timestamp}.jpeg`;
+            }
+            
+            // Try to save via WebSocket server
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'save',
+                    filename: filename,
+                    data: dataUrl,
+                    voterId: currentVoterId  // Send voter ID to server if available
+                }));
+                
+                statusText.textContent = `Saving photo as ${filename}...`;
+                
+                // Server response will be handled by ws.onmessage
+            } else {
+                // Fallback to browser download if server not available
+                downloadLink.href = dataUrl;
+                downloadLink.download = filename;
+                downloadLink.click();
+                
+                statusText.textContent = 'Server not available. Photo downloaded to your downloads folder.';
+            }
+        }
+        
+        // Event listeners
+        captureBtn.addEventListener('click', capturePhoto);
+        saveBtn.addEventListener('click', savePhoto);
+        newBtn.addEventListener('click', newPhoto);
+        
+        // Retry connection if it fails
+        function retryConnection() {
+            if (!ws || ws.readyState === WebSocket.CLOSED) {
+                console.log("Attempting to reconnect to server...");
+                connectToServer();
+            }
+        }
+        
+        // Try to reconnect every 5 seconds if connection fails
+        const reconnectInterval = setInterval(retryConnection, 5000);
+        
+        // Start the app
+        startCamera();
+        
+        // Clean up on page close
+        window.addEventListener('beforeunload', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            
+            if (faceDetectionInterval) {
+                clearInterval(faceDetectionInterval);
+            }
+            
+            if (reconnectInterval) {
+                clearInterval(reconnectInterval);
+            }
+            
+            if (ws) {
+                ws.close();
+            }
+        });
+    </script>
+</body>
+</html>
