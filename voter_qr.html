@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voter ID Card Generator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.0/build/qrcode.min.js"></script>
+    <link rel="stylesheet" href="style/voter_login.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 15px;
+            text-align: left;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            cursor: pointer;
+            margin: 10px 0;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #downloadContainer {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Voter ID Card Generator</h1>
+    <form id="voterForm">
+        <div class="form-group">
+            <label for="fullName">Full Name:</label>
+            <input type="text" id="fullName" required>
+        </div>
+        <div class="form-group">
+            <label for="dob">Date of Birth:</label>
+            <input type="date" id="dob" required>
+        </div>
+        <div class="form-group">
+            <label for="voterId">Voter ID:</label>
+            <input type="text" id="voterId" required>
+        </div>
+        <div class="form-group">
+            <label for="aadhaar">Aadhaar Number:</label>
+            <input type="text" id="aadhaar" required>
+        </div>
+        <button type="submit">Generate Voter ID Card</button>
+    </form>
+
+    <div id="downloadContainer"></div>
+
+    <script>
+        function generateUniqueId() {
+            const timestamp = Date.now();
+            const randomPart = Math.floor(10000 + Math.random() * 90000);
+            const timestampPart = timestamp % 100000;
+            return `${timestampPart}${randomPart}`;
+        }
+
+        function generateVoterCard(fullName, dob, VId, aadhaar) {
+            // Ensure jsPDF and QRCode are loaded
+            if (!window.jspdf || !window.QRCode) {
+                console.error('Required libraries not loaded');
+                return null;
+            }
+
+            let { jsPDF } = window.jspdf;
+            const doc = new jsPDF({
+                orientation: "landscape",
+                unit: "mm",
+                format: [85, 54] // Standard ID card size
+            });
+            
+            // Function to encrypt voter data securely
+            function encryptData(data) {
+                const encKey = "VoterSecureAppKey2025";
+                return CryptoJS.AES.encrypt(JSON.stringify(data), encKey).toString();
+            }
+            
+            // Calculate QR code expiration (1 year from now)
+            const qrExpiration = new Date();
+            qrExpiration.setFullYear(qrExpiration.getFullYear() + 1);
+            
+            // Prepare secure voter data for QR code
+            const voterData = {
+                name: fullName || '',
+                dob: dob || '',
+                vid: VId,
+                aadhaarVerified: !!aadhaar,
+                exp: qrExpiration.toISOString()
+            };
+            
+            // Encrypt the voter data
+            const encryptedData = encryptData(voterData);
+            
+            // Set background color
+            doc.setFillColor(245, 245, 245);
+            doc.rect(0, 0, 85, 54, 'F');
+            
+            // Add header background
+            doc.setFillColor(7, 43, 95);
+            doc.rect(0, 0, 85, 12, 'F');
+            
+            // Add orange strip below header
+            doc.setFillColor(255, 153, 51);
+            doc.rect(0, 12, 85, 1.5, 'F');
+            
+            // Add header text
+            doc.setTextColor(255, 255, 255);
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(12);
+            doc.text("VOTER IDENTIFICATION CARD", 42.5, 8, { align: "center" });
+            
+            // Add content
+            doc.setTextColor(7, 43, 95);
+            doc.setFontSize(8);
+            doc.setFont("helvetica", "bold");
+            doc.text("Name:", 5, 20);
+            doc.text("Date of Birth:", 5, 26);
+            doc.text("Voter ID:", 5, 32);
+            
+            doc.setFont("helvetica", "normal");
+            doc.text(fullName, 25, 20);
+            doc.text(dob, 25, 26);
+            doc.setFont("helvetica", "bold");
+            doc.text(VId, 25, 32);
+            
+            // Generate QR Code
+            const qrCanvas = document.createElement('canvas');
+            QRCode.toCanvas(qrCanvas, encryptedData, {
+                width: 60,
+                margin: 1,
+                color: {
+                    dark: '#000',
+                    light: '#fff'
+                }
+            });
+            
+            // Convert canvas to image
+            const qrImage = qrCanvas.toDataURL('image/png');
+            
+            // Add QR Code to PDF
+            doc.addImage(qrImage, 'PNG', 60, 15, 20, 20);
+            
+            // Add footer
+            doc.setDrawColor(200, 200, 200);
+            doc.line(5, 40, 80, 40);
+            doc.setFontSize(6);
+            doc.setTextColor(100, 100, 100);
+            doc.setFont("helvetica", "normal");
+            doc.text(`Issued: ${new Date().toLocaleDateString()}`, 42.5, 48, { align: "center" });
+            
+            // Return the PDF document
+            return {
+                doc: doc,
+                filename: `${fullName}_Voter_ID_Card.pdf`
+            };
+        }
+
+        // Function to handle voter ID card download
+        function downloadVoterIdCard(fullName, dob, VId, aadhaar) {
+            // Generate the voter ID card
+            const voterIdCard = generateVoterCard(fullName, dob, VId, aadhaar);
+            
+            if (!voterIdCard) {
+                alert('Could not generate Voter ID Card. Please try again.');
+                return;
+            }
+            
+            try {
+                // Trigger download using browser's method
+                voterIdCard.doc.save(voterIdCard.filename);
+                
+                // Fallback method if save doesn't work
+                const pdfBlob = voterIdCard.doc.output('blob');
+                const pdfUrl = URL.createObjectURL(pdfBlob);
+                
+                // Create a temporary link and trigger download
+                const link = document.createElement('a');
+                link.href = pdfUrl;
+                link.download = voterIdCard.filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // Clean up
+                URL.revokeObjectURL(pdfUrl);
+            } catch (error) {
+                console.error('Error downloading PDF:', error);
+                alert('Could not download PDF. Please check your browser settings.');
+            }
+        }
+
+        // Form submission handler
+        document.getElementById('voterForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Get form values
+            const fullName = document.getElementById('fullName').value;
+            const dob = document.getElementById('dob').value;
+            const voterId = document.getElementById('voterId').value || generateUniqueId();
+            const aadhaar = document.getElementById('aadhaar').value;
+            
+            // Create download button
+            const downloadContainer = document.getElementById('downloadContainer');
+            downloadContainer.innerHTML = ''; // Clear previous buttons
+            
+            const downloadButton = document.createElement('button');
+            downloadButton.textContent = 'Download Voter ID Card';
+            downloadButton.onclick = () => downloadVoterIdCard(fullName, dob, voterId, aadhaar);
+            
+            downloadContainer.appendChild(downloadButton);
+        });
+    </script>
+</body>
+</html>
