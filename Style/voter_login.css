@@ -1,0 +1,149 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background-color: #ff4b60;
+    background-image: url('/background_image/voting.png');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    font-family: Arial, sans-serif;
+}
+
+
+.form-container {
+    background-color: rgba(255, 255, 255, 0.7); /* 70% opacity as requested */
+    padding: 40px;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    text-align: center;
+    width: 450px;
+}
+
+h1 {
+    font-weight: bold;
+    font-size: 30px;
+    margin-bottom: 15px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    background: #eef2ff;
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.form-group input {
+    border: none;
+    outline: none;
+    width: 100%;
+    padding: 12px;
+    font-size: 16px;
+    background: rgba(255, 255, 255, 0.7); /* Make input backgrounds semi-transparent */
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    backdrop-filter: blur(5px); /* Add blur effect */
+    -webkit-backdrop-filter: blur(5px); /* For Safari support */
+}
+
+.submit-btn {
+    background: #ff4b60;
+    border: none;
+    width: 100%;
+    padding: 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    color: rgb(12, 1, 1);
+}
+
+.submit-btn:hover {
+    background: #e0424f;
+}
+
+.error-message {
+    color: #e74c3c;
+    margin-top: 10px;
+    font-size: 14px;
+    display: none;
+}
+
+.success-message {
+    color: #25e375;
+    margin-top: 10px;
+    font-size: 14px;
+    display: none;
+}
+
+.loading {
+    display: none;
+    margin-top: 10px;
+}
+
+.loading::after {
+    content: "...";
+    animation: dots 1s steps(5, end) infinite;
+}
+
+.back-link {
+    display: inline-block;
+    margin-top: 20px;
+    color: #080000;
+    text-decoration: none;
+    font-size: 14px;
+    transition: color 0.3s;
+}
+
+.back-link:hover {
+    color: #4285f4;
+    text-decoration: underline;
+}
+
+.button-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+@keyframes dots {
+    0%, 20% { content: "."; }
+    40% { content: ".."; }
+    60%, 100% { content: "..."; }
+}
+
+.auto-fill-notice {
+    background-color: white;
+    color: #000802;
+    padding: 8px;
+    border-radius: 4px;
+    margin-bottom: 15px;
+    display: none;
+}
+
+.password-toggle {
+    margin-top: -10px;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+}
+
+.password-toggle input[type="checkbox"] {
+    width: auto;
+    margin-right: 5px;
+}

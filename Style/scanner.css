@@ -1,0 +1,209 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background-color: #ff4b60;
+    background-image: url('/background_image/Voting_UCT.jpg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    padding: 20px;
+}
+
+.container {
+    background: rgba(255, 255, 255, 0.8);
+    padding: 40px;
+    border-radius: 20px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    text-align: center;
+    width: 100%;
+    max-width: 600px;
+}
+
+h1 {
+    font-weight: 600;
+    font-size: 28px;
+    margin-bottom: 20px;
+    color: #222;
+}
+
+.description {
+    margin-bottom: 20px;
+    color: #444;
+    font-size: 15px;
+}
+
+#scanner {
+    width: 100%;
+    max-width: 500px;
+    height: 300px;
+    border: 3px solid #ccc;
+    margin: 0 auto 20px;
+    position: relative;
+    overflow: hidden;
+    background-color: #000;
+    border-radius: 10px;
+}
+
+#scanner-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.3);
+    border: 50px solid rgba(0, 0, 0, 0.7);
+    box-sizing: border-box;
+    pointer-events: none;
+}
+
+#scanner-line {
+    position: absolute;
+    width: 100%;
+    height: 2px;
+    background: #ff4b60;
+    top: 50%;
+    animation: scan 2s linear infinite;
+}
+
+@keyframes scan {
+    0% { top: 20%; }
+    50% { top: 80%; }
+    100% { top: 20%; }
+}
+
+.scan-button {
+    background: #ff4b60;
+    color: white;
+    border: none;
+    width: 100%;
+    padding: 12px 50px;
+    font-size: 16px;
+    font-weight: bold;
+    border-radius: 50px;
+    margin-bottom: 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+}
+
+.scan-button:hover {
+    background: #ff4b60;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px #ff4b60;
+}
+
+.scan-button:active {
+    transform: translateY(0);
+}
+
+#result {
+    display: none;
+    margin-top: 20px;
+    padding: 20px;
+    border-radius: 20px;
+    text-align: left;
+}
+
+.result-green {
+    background-color: rgba(76, 175, 80, 0.1);
+    border: 2px solid #4CAF50;
+}
+
+.result-red {
+    background-color: rgba(244, 67, 54, 0.1);
+    border: 2px solid #F44336;
+}
+
+.result-blue {
+    background-color: rgba(255, 75, 96, 0.1);
+    border: 2px solid #ff4b60;
+}
+
+.status-indicator {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    margin: 0 auto 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 40px;
+    color: white;
+}
+
+.green-light {
+    background-color: #4CAF50;
+    box-shadow: 0 0 20px #4CAF50;
+}
+
+.red-light {
+    background-color: #F44336;
+    box-shadow: 0 0 20px #F44336;
+}
+
+.blue-light {
+    background-color: #ff4b60;
+    box-shadow: 0 0 20px #ff4b60;
+}
+
+.voter-details {
+    margin-top: 20px;
+}
+
+.voter-details h3 {
+    margin-bottom: 10px;
+    color: #222;
+    font-weight: 600;
+}
+
+.voter-details p {
+    margin-bottom: 5px;
+    color: #444;
+}
+
+.voter-details strong {
+    color: #222;
+    font-weight: 600;
+}
+
+#message {
+    font-size: 18px;
+    font-weight: bold;
+    margin: 10px 0;
+    color: #222;
+}
+
+.loader {
+    display: none;
+    border: 5px solid #f3f3f3;
+    border-top: 5px solid #ff4b60;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    margin: 20px auto;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+#countdown {
+    font-size: 16px;
+    font-weight: bold;
+    color: #ff4b60;
+    margin-top: 10px;
+    display: none;
+}
